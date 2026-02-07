@@ -1,0 +1,49 @@
+# Configuration parameters for road segmentation and nvblox integration
+
+road_mask_extractor:
+  ros__parameters:
+    # Blue color detection (RGB format)
+    blue_threshold_r: 0
+    blue_threshold_g: 0
+    blue_threshold_b: 255
+    color_tolerance: 30
+    
+    # Topics
+    input_topic: "/segmentation/color_mask"
+    output_mask_topic: "/segmentation/road_mask"
+    output_image_topic: "/segmentation/color_mask/road/image"
+
+depth_masker:
+  ros__parameters:
+    # Topics
+    depth_input_topic: "/camera/depth_image"
+    mask_input_topic: "/segmentation/road_mask"
+    depth_output_topic: "/nvblox/depth/image"
+    
+    # Synchronization
+    sync_slop: 0.1
+    resize_to_depth: true
+
+camera_info_publisher:
+  ros__parameters:
+    # Topics
+    image_topic: "/nvblox/depth/image"
+    camera_info_topic: "/nvblox/depth/camera_info"
+    
+    # Frame ID (must match TF tree)
+    frame_id: "camera_depth_optical_frame"
+    
+    # Camera intrinsics (RealSense D435 typical values - ADJUST TO YOUR CAMERA)
+    width: 640
+    height: 480
+    fx: 386.23
+    fy: 386.23
+    cx: 323.48
+    cy: 238.67
+    
+    # Distortion (plumb_bob model)
+    k1: 0.0
+    k2: 0.0
+    p1: 0.0
+    p2: 0.0
+    k3: 0.0
