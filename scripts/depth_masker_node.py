@@ -32,6 +32,7 @@ class DepthMaskerNode(Node):
         self.declare_parameter('sync_slop', 0.1)
         self.declare_parameter('resize_to_depth', True)
         self.declare_parameter('output_frame_id', 'camera_depth_optical_frame')  # Override frame_id
+        self.declare_parameter('depth_scale', 1000.0)  # Divide by this to get meters (1000 for mm, 10000 for custom)
         
         # Get parameters
         depth_input = self.get_parameter('depth_input_topic').value
@@ -40,6 +41,7 @@ class DepthMaskerNode(Node):
         sync_slop = self.get_parameter('sync_slop').value
         self.resize_to_depth = self.get_parameter('resize_to_depth').value
         self.output_frame_id = self.get_parameter('output_frame_id').value
+        self.depth_scale = self.get_parameter('depth_scale').value
         
         # CV Bridge
         self.bridge = CvBridge()
@@ -78,24 +80,33 @@ class DepthMaskerNode(Node):
     def sync_callback(self, depth_msg: Image, mask_msg: Image):
         """Process synchronized depth and mask images."""
         try:
-            # Convert depth image (preserve original encoding)
-            # mono16 and 16UC1 are equivalent (16-bit unsigned), but nvblox expects 16UC1
+            # Convert depth image
+            # mono16/16UC1 are in millimeters, nvblox expects meters for 32FC1
             if depth_msg.encoding in ['32FC1']:
+                # Already in meters as float
                 depth_image = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='32FC1')
-                output_encoding = '32FC1'
+                depth_in_meters = depth_image
+                self.get_logger().info(f'Depth already 32FC1, range: {np.min(depth_image):.3f} - {np.max(depth_image):.3f} m')
             elif depth_msg.encoding in ['16UC1', 'mono16']:
+                # 16-bit depth, convert using configurable scale
                 depth_image = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough')
-                output_encoding = '16UC1'  # Convert mono16 to 16UC1 for nvblox
+                # Convert to meters using depth_scale parameter
+                depth_in_meters = depth_image.astype(np.float32) / self.depth_scale
+                # Log conversion for debugging
+                raw_max = np.max(depth_image)
+                converted_max = np.max(depth_in_meters)
+                self.get_logger().info(f'Depth converted: raw_max={raw_max} / {self.depth_scale} -> {converted_max:.3f} m')
             else:
                 # Try passthrough for other encodings
                 depth_image = self.bridge.imgmsg_to_cv2(depth_msg, desired_encoding='passthrough')
-                output_encoding = depth_msg.encoding
+                depth_in_meters = depth_image.astype(np.float32)
+                self.get_logger().warn(f'Unknown depth encoding: {depth_msg.encoding}')
             
             # Convert mask image
             mask_image = self.bridge.imgmsg_to_cv2(mask_msg, desired_encoding='mono8')
             
             # Resize mask to match depth dimensions if needed
-            depth_h, depth_w = depth_image.shape[:2]
+            depth_h, depth_w = depth_in_meters.shape[:2]
             mask_h, mask_w = mask_image.shape[:2]
             
             if (depth_h != mask_h or depth_w != mask_w) and self.resize_to_depth:
@@ -112,14 +123,11 @@ class DepthMaskerNode(Node):
             binary_mask = (mask_image > 128).astype(np.uint8)
             
             # Apply mask to depth image
-            # Where mask is 0 (not road), set depth to 0 (invalid)
-            if depth_image.dtype == np.float32:
-                masked_depth = np.where(binary_mask == 1, depth_image, 0.0).astype(np.float32)
-            else:
-                masked_depth = np.where(binary_mask == 1, depth_image, 0).astype(depth_image.dtype)
+            # Where mask is 0 (not road), set depth to 0 (invalid for nvblox)
+            masked_depth = np.where(binary_mask == 1, depth_in_meters, 0.0).astype(np.float32)
             
-            # Convert back to ROS Image message with correct encoding for nvblox
-            masked_msg = self.bridge.cv2_to_imgmsg(masked_depth, encoding=output_encoding)
+            # Convert back to ROS Image message as 32FC1 (meters) for nvblox
+            masked_msg = self.bridge.cv2_to_imgmsg(masked_depth, encoding='32FC1')
             masked_msg.header = depth_msg.header  # Preserve timestamp
             masked_msg.header.frame_id = self.output_frame_id  # Override frame_id to match camera_info
             

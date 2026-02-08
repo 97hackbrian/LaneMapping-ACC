@@ -7,7 +7,7 @@ road_mask_extractor:
     blue_threshold_g: 0
     blue_threshold_b: 255
     color_tolerance: 30
-    
+
     # Topics
     input_topic: "/segmentation/color_mask"
     output_mask_topic: "/segmentation/road_mask"
@@ -19,10 +19,14 @@ depth_masker:
     depth_input_topic: "/camera/depth_image"
     mask_input_topic: "/segmentation/road_mask"
     depth_output_topic: "/nvblox/depth/image"
-    
+
     # Frame ID override (MUST match camera_info frame_id)
     output_frame_id: "camera_depth_optical_frame"
-    
+
+    # Depth scale: divide raw depth values by this to get meters
+    # Use 1000 for mm (standard), 10000 for custom sensors
+    depth_scale: 10000.0
+
     # Synchronization
     sync_slop: 0.1
     resize_to_depth: true
@@ -32,10 +36,10 @@ camera_info_publisher:
     # Topics
     image_topic: "/nvblox/depth/image"
     camera_info_topic: "/nvblox/depth/camera_info"
-    
+
     # Frame ID (must match TF tree)
     frame_id: "camera_depth_optical_frame"
-    
+
     # Camera intrinsics (RealSense D435 typical values - ADJUST TO YOUR CAMERA)
     width: 640
     height: 480
@@ -43,7 +47,7 @@ camera_info_publisher:
     fy: 386.23
     cx: 323.48
     cy: 238.67
-    
+
     # Distortion (plumb_bob model)
     k1: 0.0
     k2: 0.0
