@@ -123,8 +123,8 @@ class DepthMaskerNode(Node):
             binary_mask = (mask_image > 128).astype(np.uint8)
             
             # Apply mask to depth image
-            # Where mask is 0 (not road), set depth to 0 (invalid for nvblox)
-            masked_depth = np.where(binary_mask == 1, depth_in_meters, 0.0).astype(np.float32)
+            # Where mask is 0 (not road), set depth to NaN (nvblox ignores NaN values)
+            masked_depth = np.where(binary_mask == 1, depth_in_meters, np.nan).astype(np.float32)
             
             # Convert back to ROS Image message as 32FC1 (meters) for nvblox
             masked_msg = self.bridge.cv2_to_imgmsg(masked_depth, encoding='32FC1')
