@@ -20,6 +20,9 @@ depth_masker:
     mask_input_topic: "/segmentation/road_mask"
     depth_output_topic: "/nvblox/depth/image"
     
+    # Frame ID override (MUST match camera_info frame_id)
+    output_frame_id: "camera_depth_optical_frame"
+    
     # Synchronization
     sync_slop: 0.1
     resize_to_depth: true
