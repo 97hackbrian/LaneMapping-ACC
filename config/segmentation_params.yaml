@@ -40,13 +40,13 @@ camera_info_publisher:
     # Frame ID (must match TF tree)
     frame_id: "camera_depth_optical_frame"
 
-    # Camera intrinsics (RealSense D435 typical values - ADJUST TO YOUR CAMERA)
+    # Camera intrinsics (QLabs D435 Depth camera - from official documentation)
     width: 640
     height: 480
-    fx: 386.23
-    fy: 386.23
-    cx: 323.48
-    cy: 238.67
+    fx: 385.6
+    fy: 385.6
+    cx: 321.9
+    cy: 237.3
 
     # Distortion (plumb_bob model)
     k1: 0.0
