@@ -12,6 +12,10 @@ find_package(rclpy REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(cv_bridge REQUIRED)
 find_package(message_filters REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(qcar2_interfaces REQUIRED)
 
 # Install Python modules
 ament_python_install_package(${PROJECT_NAME})
@@ -21,6 +25,8 @@ install(PROGRAMS
   scripts/road_mask_extractor_node.py
   scripts/depth_masker_node.py
   scripts/camera_info_publisher_node.py
+  scripts/joint_to_odom_node.py
+  scripts/tf_to_odom_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
