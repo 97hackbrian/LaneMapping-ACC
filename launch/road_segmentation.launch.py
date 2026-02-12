@@ -23,11 +23,18 @@ def generate_launch_description():
     # Config file path
     config_file = os.path.join(pkg_dir, 'config', 'segmentation_params.yaml')
     
+    
     # Launch arguments
     config_arg = DeclareLaunchArgument(
         'config_file',
         default_value=config_file,
         description='Path to segmentation parameters YAML file'
+    )
+    
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation clock if true'
     )
     
     # Road Mask Extractor Node
@@ -36,7 +43,7 @@ def generate_launch_description():
         executable='road_mask_extractor_node.py',
         name='road_mask_extractor',
         output='screen',
-        parameters=[LaunchConfiguration('config_file')],
+        parameters=[LaunchConfiguration('config_file'), {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[]
     )
     
@@ -46,7 +53,7 @@ def generate_launch_description():
         executable='depth_masker_node.py',
         name='depth_masker',
         output='screen',
-        parameters=[LaunchConfiguration('config_file')],
+        parameters=[LaunchConfiguration('config_file'), {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[]
     )
     
@@ -56,12 +63,13 @@ def generate_launch_description():
         executable='camera_info_publisher_node.py',
         name='camera_info_publisher',
         output='screen',
-        parameters=[LaunchConfiguration('config_file')],
+        parameters=[LaunchConfiguration('config_file'), {'use_sim_time': LaunchConfiguration('use_sim_time')}],
         remappings=[]
     )
     
     return LaunchDescription([
         config_arg,
+        use_sim_time_arg,
         road_mask_extractor,
         depth_masker,
         camera_info_publisher,

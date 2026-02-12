@@ -28,7 +28,7 @@ depth_masker:
     depth_scale: 20000.0
 
     # Synchronization
-    sync_slop: 0.1
+    sync_slop: 0.01
     resize_to_depth: true
 
 camera_info_publisher:

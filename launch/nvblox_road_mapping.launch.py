@@ -49,10 +49,17 @@ def generate_launch_description():
             os.path.join(pkg_dir, 'launch', 'road_segmentation.launch.py')
         ),
         launch_arguments={
-            'config_file': LaunchConfiguration('segmentation_config')
+            'config_file': LaunchConfiguration('segmentation_config'),
+            'use_sim_time': LaunchConfiguration('use_sim_time')
         }.items()
     )
     
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (Gazebo) clock if true'
+    )
+
     # Nvblox Node with remappings for our masked depth
     nvblox_node = Node(
         package='nvblox_ros',
@@ -61,20 +68,23 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('nvblox_config'),
-            {'global_frame': LaunchConfiguration('global_frame')}
+            {
+                'global_frame': LaunchConfiguration('global_frame'),
+                'use_sim_time': LaunchConfiguration('use_sim_time')
+            }
         ],
         remappings=[
             # Remap depth input to our masked depth
             ('depth/image', '/nvblox/depth/image'),
             ('depth/camera_info', '/nvblox/depth/camera_info'),
-            # We don't use color for static reconstruction
-            # ('color/image', '/camera/color_image'),
-            # ('color/camera_info', '/camera/color/camera_info'),
+            # Use filtered odometry for mapping
+            ('pose', '/odom_filtered_pose'),
         ]
     )
     
     return LaunchDescription([
         segmentation_config_arg,
+        use_sim_time_arg,
         nvblox_config_arg,
         global_frame_arg,
         road_segmentation_launch,

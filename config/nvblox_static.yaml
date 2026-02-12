@@ -6,6 +6,8 @@ nvblox_node:
     global_frame: "map"
     voxel_size: 0.01
     use_tf_transforms: true
+    use_topic_transforms: false
+    pose_topic: "/odom_filtered_pose"
 
     # Static reconstruction mode - NO COLOR (geometry only)
     mapping_type: "static_tsdf"
@@ -19,7 +21,7 @@ nvblox_node:
     # ESDF for navigation
     compute_esdf: true
     esdf_2d: true
-    esdf_update_rate_hz: 2.0
+    esdf_update_rate_hz: 20.0
     esdf_slice_height: 0.5
     esdf_2d_min_height: 0.0
     esdf_2d_max_height: 1.0
@@ -30,11 +32,11 @@ nvblox_node:
 
     # Static mapper parameters
     static_mapper:
-      projective_integrator_max_integration_distance_m: 1.2
-      projective_integrator_truncation_distance_vox: 6.0
+      projective_integrator_max_integration_distance_m: 10.0
+      projective_integrator_truncation_distance_vox: 7.0
       weighting_mode: "inverse_square"
       projective_integrator_max_weight: 10.0
-      mesh_integrator_min_weight: 0.01
+      mesh_integrator_min_weight: 10.0
       mesh_integrator_weld_vertices: true
 
     # Map clearing (optional - adjust based on robot movement)

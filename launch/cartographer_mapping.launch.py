@@ -76,16 +76,17 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'output_topic': '/odom_filtered',
+            'use_sim_time': use_sim,
         }],
     )
 
     return LaunchDescription([
-        tf_to_odom_node,
-        configuration_basename_la,
         use_sim_la,
+        configuration_basename_la,
         resolution_la,
         publish_period_sec_la,
+        qcar2_to_lidar_tf_node,
         cartographer_node,
         cartographer_occupancy_grid_node,
-        qcar2_to_lidar_tf_node,
+        tf_to_odom_node,
     ])
