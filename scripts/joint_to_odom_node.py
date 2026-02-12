@@ -61,12 +61,16 @@ class QCar2RobustOdom(Node):
         self.declare_parameter('odom_frame', 'odom')
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('publish_tf', True)
-        self.declare_parameter('calibration_samples', 200) # ~2 seconds at 100Hz
+        self.declare_parameter('calibration_samples', 500) # ~2 seconds at 100Hz
+        self.declare_parameter('gyro_scale_factor', 1.2) # Scale factor for gyroscope (Z-axis)
+        self.declare_parameter('vel_scale_factor', 0.95) # Scale factor for linear velocity
 
         self.odom_frame = self.get_parameter('odom_frame').value
         self.base_frame = self.get_parameter('base_frame').value
         self.publish_tf = self.get_parameter('publish_tf').value
         self.calibration_samples = self.get_parameter('calibration_samples').value
+        self.gyro_scale_factor = self.get_parameter('gyro_scale_factor').value
+        self.vel_scale_factor = self.get_parameter('vel_scale_factor').value
 
         # ── State ───────────────────────────────────────────────────
         self.x = 0.0
@@ -150,7 +154,7 @@ class QCar2RobustOdom(Node):
         # ── 1. Calculate Linear Velocity (v) ────────────────────────
         # Use motor velocity (index 0 usually corresponds to drive motor)
         raw_velocity_counts = msg.velocity[0]
-        v_linear = raw_velocity_counts * SPEED_FACTOR
+        v_linear = raw_velocity_counts * SPEED_FACTOR * self.vel_scale_factor
 
         # Deadzone check (Stationary)
         if abs(v_linear) < 0.005: # 5 mm/s deadzone
@@ -164,7 +168,7 @@ class QCar2RobustOdom(Node):
         else:
             # ── 2. Calculate Angular Velocity (ω) ───────────────────────
             # Use Calibrated Gyro
-            omega = self.latest_gyro_z - self.gyro_bias
+            omega = (self.latest_gyro_z - self.gyro_bias) * self.gyro_scale_factor
 
         # ── 3. Integrate Pose (Runge-Kutta 2 / Midpoint) ────────────
         delta_theta = omega * dt
