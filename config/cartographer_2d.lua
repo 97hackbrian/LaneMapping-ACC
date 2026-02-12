@@ -54,7 +54,7 @@ TRAJECTORY_BUILDER_2D.submaps.grid_options_2d.resolution = 0.05
 
 -- Motion filter
 TRAJECTORY_BUILDER_2D.motion_filter.max_time_seconds = 0.5
-TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.1
+TRAJECTORY_BUILDER_2D.motion_filter.max_distance_meters = 0.9
 TRAJECTORY_BUILDER_2D.motion_filter.max_angle_radians = math.rad(0.2)
 
 -- ── Pose graph (Loop Closure) ──────────────────────────────────
