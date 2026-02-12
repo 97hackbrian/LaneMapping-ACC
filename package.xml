@@ -23,6 +23,7 @@
     <depend>python3-numpy</depend>
 
     <exec_depend>ros2launch</exec_depend>
+    <exec_depend>rtabmap_ros</exec_depend>
 
     <export>
         <build_type>ament_cmake</build_type>

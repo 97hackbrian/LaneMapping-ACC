@@ -1,107 +1,70 @@
-# LaneMapping-ACC
+# Lane Mapping ACC
 
-ROS2 Humble package for road segmentation and 3D mapping with Isaac ROS Nvblox.
+This package provides road segmentation and masking for 3D mapping using Isaac ROS Nvblox and RTAB-Map.
 
-## Overview
+## Quick Start: Launch Order
 
-This package extracts road regions (blue color) from a segmentation mask, applies the mask to depth images, and feeds the masked depth to Isaac ROS Nvblox for 3D reconstruction of road surfaces only.
+To run the full system, execute these launch files in order:
 
-## Features
+1.  **Robot Drivers**: Start your robot hardware usually with `ros2 launch qcar2_bringup bringup.launch.py` (Camera + IMU).
+2.  **Segmentation**: `ros2 launch lane_mapping_acc road_segmentation.launch.py`
+3.  **Mapping**: `ros2 launch lane_mapping_acc rtabmap_mapping.launch.py`
 
-- **Blue road extraction** from `/segmentation/color_mask` with configurable color thresholds
-- **Depth masking** to keep only road regions for 3D reconstruction
-- **Synthetic CameraInfo generation** with configurable intrinsics
-- **Nvblox integration** in static reconstruction mode (geometry only, no color)
+## RTAB-Map Integration
 
-## Topics
-
-### Subscribed
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/segmentation/color_mask` | sensor_msgs/Image | Input RGB segmentation mask |
-| `/camera/depth_image` | sensor_msgs/Image | Input depth image from RealSense D435 |
-
-### Published
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/segmentation/road_mask` | sensor_msgs/Image | Binary road mask (mono8) |
-| `/segmentation/color_mask/road/image` | sensor_msgs/Image | Visualization of extracted road |
-| `/nvblox/depth/image` | sensor_msgs/Image | Masked depth for nvblox |
-| `/nvblox/depth/camera_info` | sensor_msgs/CameraInfo | Camera intrinsics |
-
-## Installation
+To run RTAB-Map with visual odometry and 3D mapping using masked depth images:
 
 ```bash
-cd ~/ros2_ws
-colcon build --packages-select lane_mapping_acc
-source install/setup.bash
+ros2 launch lane_mapping_acc rtabmap_mapping.launch.py
 ```
 
-## Usage
+### Configuration
 
-### Run segmentation pipeline only
+- **Visual Odometry**: Uses raw depth from `/camera/depth_image` and RGB from `/camera/color_image`.
+- **Mapping (SLAM)**: Uses masked depth from `/nvblox/depth/image` (road only) and IMU from `/qcar2_imu`.
+
+### Static Transform
+
+The launch file includes the following static transform for the camera:
+
 ```bash
-ros2 launch lane_mapping_acc road_segmentation.launch.py
+ros2 run tf2_ros static_transform_publisher \
+    --x 0.095 --y 0.032 --z 0.172 \
+    --roll -1.5708 --pitch 0 --yaw -1.5708 \
+    --frame-id base_link \
+    --child-frame-id camera_depth_optical_frame
 ```
-
-### Run complete pipeline with Nvblox
-```bash
-ros2 run tf2_ros static_transform_publisher     --x 0.095 --y 0.032 --z 0.172     --roll -1.5708 --pitch 0 --yaw -1.5708     --frame-id base_link     --child-frame-id camera_depth_optical_frame
-
-ros2 run qcar2_laneseg_acc color_segmentation_node.py --ros-args -p roi_height_ratio:=0.2
-
-
-ros2 launch lane_mapping_acc cartographer_mapping.launch.py
-
-ros2 launch lane_mapping_acc nvblox_road_mapping.launch.py use_sim_time:=true
-
-```
-
-### Custom configuration
-```bash
-ros2 launch lane_mapping_acc nvblox_road_mapping.launch.py \
-    segmentation_config:=/path/to/custom_segmentation.yaml \
-    nvblox_config:=/path/to/custom_nvblox.yaml \
-    global_frame:=map
-```
-
-## Configuration
-
-### `config/segmentation_params.yaml`
-- Blue color thresholds (RGB) and tolerance
-- Input/output topic names
-- Camera intrinsics (fx, fy, cx, cy)
-- Synchronization parameters
-
-### `config/nvblox_static.yaml`
-- Nvblox parameters for static TSDF reconstruction
-- ESDF configuration for navigation
-- Mesh visualization settings
 
 ## Nodes
 
-| Node | Description |
-|------|-------------|
-| `road_mask_extractor` | Extracts blue road regions from color mask |
-| `depth_masker` | Applies road mask to depth image |
-| `camera_info_publisher` | Generates CameraInfo for masked depth |
+### Depth Masker
+- Input: `/camera/depth_image`, `/segmentation/road_mask`
+- Output: `/nvblox/depth/image` (masked depth)
 
-## Saving the 3D Map
+### Camera Info Publisher
+- Publishes synthesized `CameraInfo` for the masked depth image.
+
 
 ```bash
-# Save as PLY file
-ros2 service call /nvblox_node/save_ply nvblox_msgs/srv/FilePath "{file_path: '/tmp/road_map.ply'}"
 
-# Save full map (for later loading)
-ros2 service call /nvblox_node/save_map nvblox_msgs/srv/FilePath "{file_path: '/tmp/road_map.nvblx'}"
+sudo ln -sf /usr/include/eigen3/Eigen /usr/include/Eigen
+sudo ln -sf /usr/include/eigen3/unsupported /usr/include/unsupported
+sudo ln -sf message_filters/subscriber.h subscriber.hpp
+sudo ln -sf message_filters/time_synchronizer.h time_synchronizer.hpp
+sudo ln -sf message_filters/synchronizer.h synchronizer.hpp
+sudo ln -sf message_filters/sync_policies sync_policies
+sudo ln -sf approximate_time.h approximate_time.hpp
+sudo ln -sf exact_time.h exact_time.hpp
+sudo ln -sf /opt/ros/humble/include/tf2/tf2/LinearMath/Transform.h /opt/ros/humble/include/tf2/tf2/LinearMath/Transform.hpp
+sudo ln -sf /opt/ros/humble/include/tf2/tf2/LinearMath/Vector3.h /opt/ros/humble/include/tf2/tf2/LinearMath/Vector3.hpp
+sudo ln -sf /opt/ros/humble/include/tf2/tf2/LinearMath/Quaternion.h /opt/ros/humble/include/tf2/tf2/LinearMath/Quaternion.hpp
+sudo ln -sf /opt/ros/humble/include/tf2/tf2/LinearMath/Matrix3x3.h /opt/ros/humble/include/tf2/tf2/LinearMath/Matrix3x3.hpp
+sudo ln -sf /opt/ros/humble/include/tf2/tf2/LinearMath/Scalar.h /opt/ros/humble/include/tf2/tf2/LinearMath/Scalar.hpp
+sudo ln -sf /opt/ros/humble/include/tf2/tf2/LinearMath/MinMax.h /opt/ros/humble/include/tf2/tf2/LinearMath/MinMax.hpp
+sudo ln -sf tf2/buffer_core.h buffer_core.hpp
+sudo ln -sf tf2/convert.h convert.hpp
+sudo ln -sf tf2/exceptions.h exceptions.hpp
+sudo ln -sf tf2/impl/utils.h utils.hpp
+sudo ln -sf tf2/transform_datatypes.h transform_datatypes.hpp
+sed -i 's/tf2::getYaw/tf2::impl::getYaw/g' /workspaces/isaac_ros-dev/ros2/src/rtabmap_ros/rtabmap_util/src/nodelets/imu_to_tf.cpp
 ```
-
-## Visualization in RViz2
-
-1. Add `Image` display for `/segmentation/road_mask`
-2. Add `Image` display for `/nvblox/depth/image`
-3. Add nvblox mesh plugin for 3D reconstruction visualization
-
-## License
-
-MIT

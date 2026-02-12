@@ -27,6 +27,7 @@ install(PROGRAMS
   scripts/camera_info_publisher_node.py
   scripts/joint_to_odom_node.py
   scripts/tf_to_odom_node.py
+  scripts/rgb_throttler_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
