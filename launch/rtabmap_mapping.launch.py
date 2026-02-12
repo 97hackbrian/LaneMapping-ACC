@@ -99,19 +99,19 @@ def generate_launch_description():
     )
 
     # ══════════════════════════════════════════════════════════════════
-    # 4. WHEEL ODOMETRY (IMU + Encoders)
-    # Replaces visual odometry - stable, no crashes
+    # 4. ODOMETRY (TF-based EKF + IMU fusion)
+    # Reads odom->base_link TF, fuses with IMU gyro, publishes smooth odom
     # ══════════════════════════════════════════════════════════════════
-    wheel_odom_node = Node(
+    odom_node = Node(
         package='lane_mapping_acc',
-        executable='joint_to_odom_node.py',
-        name='joint_to_odom',
+        executable='tf_to_odom_node.py',
+        name='tf_to_odom_ekf',
         output='screen',
         parameters=[{
             'odom_frame': 'odom',
             'base_frame': 'base_link',
-            'publish_tf': True,
-            'calibration_samples': 200
+            'map_frame': 'map',
+            'output_topic': '/odom'
         }]
     )
 
@@ -198,7 +198,7 @@ def generate_launch_description():
         static_tf_camera,
         static_tf_color,
         static_tf_depth,
-        wheel_odom_node,
+        odom_node,
         rtabmap_slam_node,
         # rtabmap_viz_node  # Uncomment for visualization
     ])
