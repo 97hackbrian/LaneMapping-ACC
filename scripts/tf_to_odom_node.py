@@ -6,9 +6,14 @@ This node provides a stable, high-rate (100Hz) odometry source by fusing:
 1. Low-rate Pose updates from Cartographer (via TF odom->base_link).
 2. High-rate Angular Velocity from IMU.
 
-Algorithm (Simplified EKF/Complementary Filter):
+Algorithm (Simplified EKF/Complementary Filter) with Anti-Oscillation:
 - Prediction (100Hz): Integrate IMU gyro for heading. Dead-reckon position using last known velocity.
-- Correction (~5-20Hz): When TF updates, correct position/heading towards the TF value, but smooth out jumps.
+- Correction (~5-20Hz): When TF updates, correct position/heading ONLY if change exceeds tolerance.
+
+Tolerances:
+- position_tolerance: min distance change (m) required to update position target.
+- orientation_tolerance: min angle change (rad) required to update orientation target.
+- filter_alpha_*: Smoothing factor (0.01 - 1.0). Lower = smoother but slower response.
 
 Publishes:
 - /odom_filtered (nav_msgs/Odometry)
@@ -21,9 +26,8 @@ from rclpy.time import Time
 from tf2_ros import Buffer, TransformListener
 from sensor_msgs.msg import Imu
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Quaternion, TransformStamped
+from geometry_msgs.msg import Quaternion
 import math
-import numpy as np
 
 def euler_from_quaternion(q):
     t3 = +2.0 * (q.w * q.z + q.x * q.y)
@@ -44,6 +48,12 @@ def quaternion_from_euler(roll, pitch, yaw):
     q.z = cr * cp * sy - sr * sp * cy
     return q
 
+def angle_diff(a, b):
+    d = a - b
+    while d > math.pi: d -= 2*math.pi
+    while d < -math.pi: d += 2*math.pi
+    return d
+
 class TfToOdomEKF(Node):
     def __init__(self):
         super().__init__('tf_to_odom_ekf')
@@ -52,17 +62,21 @@ class TfToOdomEKF(Node):
         self.declare_parameter('base_frame', 'base_link')
         self.declare_parameter('output_topic', '/odom_filtered')
         
-        # Filter parameters - Tune these!
-        # Alpha controls how much we trust the TF measurement vs our prediction.
-        # 0.05 = VERY smooth, trust prediction 95%. 0.5 = trust TF 50%.
-        self.declare_parameter('filter_alpha_pos', 0.1) 
-        self.declare_parameter('filter_alpha_yaw', 0.05) 
+        # Filter parameters - Tuned for stability
+        # Lower alpha = smoother
+        self.declare_parameter('filter_alpha_pos', 0.05) 
+        self.declare_parameter('filter_alpha_yaw', 0.02)
+        # Tolerance parameters (Anti-Oscillation)
+        self.declare_parameter('position_tolerance', 0.02) # meters
+        self.declare_parameter('orientation_tolerance', 0.02) # radians
 
         self.odom_frame = self.get_parameter('odom_frame').value
         self.base_frame = self.get_parameter('base_frame').value
         self.output_topic = self.get_parameter('output_topic').value
         self.alpha_pos = self.get_parameter('filter_alpha_pos').value
         self.alpha_yaw = self.get_parameter('filter_alpha_yaw').value
+        self.pos_tol = self.get_parameter('position_tolerance').value
+        self.ori_tol = self.get_parameter('orientation_tolerance').value
 
         # TF Listener
         self.tf_buffer = Buffer()
@@ -89,7 +103,8 @@ class TfToOdomEKF(Node):
 
         # Last TF update timestamp
         self.last_tf_time = Time(seconds=0)
-        self.last_tf_pos = (0.0, 0.0)
+        self.last_accepted_tf_pos = (0.0, 0.0)
+        self.last_accepted_tf_yaw = 0.0
         self.tf_initialized = False
 
         # QoS
@@ -101,7 +116,7 @@ class TfToOdomEKF(Node):
         # Main Loop (100Hz) - Prediction & Publishing
         self.create_timer(0.01, self._loop)
         
-        self.get_logger().info("🚀 TF-to-Odom EKF Started! Calibrating gyro...")
+        self.get_logger().info(f"🚀 TF-to-Odom EKF Started! PosTol={self.pos_tol} OriTol={self.ori_tol}")
 
     def _imu_cb(self, msg):
         self.gyro_z = msg.angular_velocity.z
@@ -141,7 +156,8 @@ class TfToOdomEKF(Node):
                 # First ever TF received -> Jump state to it directly
                 self.x, self.y, self.th = px, py, pth
                 self.last_tf_time = tf_time
-                self.last_tf_pos = (px, py)
+                self.last_accepted_tf_pos = (px, py)
+                self.last_accepted_tf_yaw = pth
                 self.tf_initialized = True
                 self.get_logger().info("✅ Initial Pose acquired from TF")
             
@@ -151,39 +167,60 @@ class TfToOdomEKF(Node):
                 
                 # If this is a NEW transform (dt > 0)
                 if dt_tf > 0.001:
-                    # Estimate velocity from TF position change
-                    dist = math.sqrt((px - self.last_tf_pos[0])**2 + (py - self.last_tf_pos[1])**2)
-                    v_meas = dist / dt_tf
+                    # Check Tolerances (Oscillation Filter)
+                    last_px, last_py = self.last_accepted_tf_pos
+                    dist_sq = (px - last_px)**2 + (py - last_py)**2
+                    yaw_diff = abs(angle_diff(pth, self.last_accepted_tf_yaw))
                     
-                    # Direction check (simple dot product with heading)
-                    dx = px - self.last_tf_pos[0]
-                    dy = py - self.last_tf_pos[1]
-                    heading_vec = (math.cos(pth), math.sin(pth))
-                    dot = dx*heading_vec[0] + dy*heading_vec[1]
-                    if dot < -0.01: v_meas = -v_meas # Limit reverse detection
+                    is_moved = True
+                    # Only apply tolerances if pose is considered stationary-ish (v small)
+                    # Or apply always? User requested strict filter.
+                    if dist_sq < (self.pos_tol**2) and yaw_diff < self.ori_tol:
+                        is_moved = False
+                        # If movement is tiny, we ignore the NEW pose and keep dead reckoning
+                        # BUT we should probably check if velocity is zero.
+                        # If velocity is zero, we clamp position.
+                        if abs(self.v) < 0.01 and abs(self.w) < 0.01:
+                            # Force update state to match previous accepted to verify stop?
+                            # No, just do nothing.
+                            pass
+                        # If moving, small changes might be valid.
+                        # But user specifically asked to filter small jitter.
                     
-                    # Update Velocity estimate (Low Pass Filter)
-                    # Trust derived velocity slightly, but smooth heavily
-                    self.v = 0.9 * self.v + 0.1 * v_meas
-                    
-                    self.last_tf_time = tf_time
-                    self.last_tf_pos = (px, py)
-
-                    # INNOVATION (Error between Measurement and Prediction)
-                    def angle_diff(a, b):
-                        d = a - b
-                        while d > math.pi: d -= 2*math.pi
-                        while d < -math.pi: d += 2*math.pi
-                        return d
-
-                    err_x = px - self.x
-                    err_y = py - self.y
-                    err_th = angle_diff(pth, self.th)
-                    
-                    # Update State (Correction)
-                    self.x += self.alpha_pos * err_x
-                    self.y += self.alpha_pos * err_y
-                    self.th += self.alpha_yaw * err_th
+                    if is_moved:
+                        # Estimate velocity from TF position change
+                        dist = math.sqrt(dist_sq)
+                        v_meas = dist / dt_tf
+                        
+                        # Direction check
+                        dx = px - last_px
+                        dy = py - last_py
+                        heading_vec = (math.cos(pth), math.sin(pth))
+                        dot = dx*heading_vec[0] + dy*heading_vec[1]
+                        if dot < -0.01: v_meas = -v_meas 
+                        
+                        # LPF for velocity
+                        self.v = 0.95 * self.v + 0.05 * v_meas
+                        
+                        # Apply Correction (Innovation)
+                        err_x = px - self.x
+                        err_y = py - self.y
+                        err_th = angle_diff(pth, self.th)
+                        
+                        self.x += self.alpha_pos * err_x
+                        self.y += self.alpha_pos * err_y
+                        self.th += self.alpha_yaw * err_th
+                        
+                        # Update accepted state
+                        self.last_accepted_tf_pos = (px, py)
+                        self.last_accepted_tf_yaw = pth
+                        self.last_tf_time = tf_time
+                    else:
+                        # If NOT moved (filtered by tolerance), we just update time but keep old pose ref
+                        # This effectively ignores the jittery update
+                        self.last_tf_time = tf_time
+                        # Dampen velocity towards 0
+                        self.v *= 0.9
 
         except Exception:
             pass # TF not ready yet
@@ -192,13 +229,13 @@ class TfToOdomEKF(Node):
         omega = self.gyro_z - self.gyro_bias
         
         # Deadzone for rotation drift
-        if abs(omega) < 0.003: omega = 0.0
+        if abs(omega) < 0.005: omega = 0.0
         
         # Integrate Heading
         self.th += omega * dt
         self.th = math.atan2(math.sin(self.th), math.cos(self.th)) # Normalize
 
-        # Deadzone for velocity (force stop if extremely slow)
+        # Deadzone for velocity
         if abs(self.v) < 0.005: self.v = 0.0
 
         # Integrate Position
@@ -224,10 +261,11 @@ class TfToOdomEKF(Node):
         msg.twist.twist.linear.x = self.v
         msg.twist.twist.angular.z = self.w
         
-        # Covariance
+        # Covariance - Increase if needed
+        cov_p = 0.05 if abs(self.v) > 0.01 else 0.001 # Confident when stopped
         msg.pose.covariance = [
-            0.01, 0., 0., 0., 0., 0.,
-            0., 0.01, 0., 0., 0., 0.,
+            cov_p, 0., 0., 0., 0., 0.,
+            0., cov_p, 0., 0., 0., 0.,
             0., 0., 1e6, 0., 0., 0.,
             0., 0., 0., 1e6, 0., 0.,
             0., 0., 0., 0., 1e6, 0.,
