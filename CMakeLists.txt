@@ -28,6 +28,7 @@ install(PROGRAMS
   scripts/joint_to_odom_node.py
   scripts/tf_to_odom_node.py
   scripts/rgb_throttler_node.py
+  scripts/depth_encoding_fixer_node.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
