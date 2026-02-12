@@ -46,7 +46,15 @@ ros2 launch lane_mapping_acc road_segmentation.launch.py
 
 ### Run complete pipeline with Nvblox
 ```bash
-ros2 launch lane_mapping_acc nvblox_road_mapping.launch.py
+ros2 run tf2_ros static_transform_publisher     --x 0.095 --y 0.032 --z 0.172     --roll -1.5708 --pitch 0 --yaw -1.5708     --frame-id base_link     --child-frame-id camera_depth_optical_frame
+
+ros2 run qcar2_laneseg_acc color_segmentation_node.py --ros-args -p roi_height_ratio:=0.2
+
+
+ros2 launch lane_mapping_acc cartographer_mapping.launch.py
+
+ros2 launch lane_mapping_acc nvblox_road_mapping.launch.py use_sim_time:=true
+
 ```
 
 ### Custom configuration
