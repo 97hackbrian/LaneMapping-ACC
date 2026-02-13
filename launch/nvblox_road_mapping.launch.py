@@ -3,8 +3,11 @@
 Nvblox Road Mapping Launch File
 
 Launches the complete pipeline for 3D road mapping:
-1. Road segmentation nodes (via include)
-2. Nvblox node configured for static reconstruction (no color)
+1. Static Transform Publisher (Camera to Base)
+2. Color Segmentation Node (QCar2) - with roi_height_ratio=0.2
+3. Road Segmentation Launch (Mask Extractor, Depth Masker, Camera Info)
+4. Cartographer Mapping
+5. Nvblox Node
 """
 
 import os
@@ -43,7 +46,49 @@ def generate_launch_description():
         description='Global frame for nvblox mapping'
     )
     
-    # Include road segmentation launch
+    use_sim_time_arg = DeclareLaunchArgument(
+        'use_sim_time',
+        default_value='false',
+        description='Use simulation (Gazebo) clock if true'
+    )
+
+    # 1. Static Transform Publisher
+    # ros2 run tf2_ros static_transform_publisher --x 0.095 --y 0.032 --z 0.172 --roll -1.5708 --pitch 0 --yaw -1.5708 --frame-id base_link --child-frame-id camera_depth_optical_frame
+    static_tf_publisher = Node(
+        package='tf2_ros',
+        executable='static_transform_publisher',
+        name='camera_tf_publisher',
+        output='screen',
+        arguments=[
+            '--x', '0.095', '--y', '0.032', '--z', '0.172',
+            '--roll', '-1.5708', '--pitch', '0', '--yaw', '-1.5708',
+            '--frame-id', 'base_link',
+            '--child-frame-id', 'camera_depth_optical_frame'
+        ]
+    )
+
+    # 2. Color Segmentation Node
+    # ros2 run qcar2_laneseg_acc color_segmentation_node.py --ros-args -p roi_height_ratio:=0.2
+    # Note: Using parameters directly. 'use_sim_time' is included for consistency with other nodes.
+    # If the user specifically removed it, it might be due to a specific driver behavior, but 
+    # for general ROS2 consistency it's usually safer to include it if simulation is possible.
+    # However, since the user removed it in their edit, I will omit it here to respect their change
+    # and to potentially avoid the issue they were facing.
+    color_segmentation_node = Node(
+        package='qcar2_laneseg_acc',
+        executable='color_segmentation_node.py',
+        name='color_segmentation',
+        output='screen',
+        parameters=[
+            LaunchConfiguration('segmentation_config'),
+            {'roi_height_ratio': 0.2},
+            # {'use_sim_time': LaunchConfiguration('use_sim_time')} # Omitting as per user's last edit pattern
+        ]
+    )
+
+    # 3. Include Road Segmentation Launch
+    # Includes: road_mask_extractor, depth_masker, camera_info_publisher
+    # This was reported to "work well" by the user.
     road_segmentation_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
             os.path.join(pkg_dir, 'launch', 'road_segmentation.launch.py')
@@ -53,14 +98,20 @@ def generate_launch_description():
             'use_sim_time': LaunchConfiguration('use_sim_time')
         }.items()
     )
-    
-    use_sim_time_arg = DeclareLaunchArgument(
-        'use_sim_time',
-        default_value='false',
-        description='Use simulation (Gazebo) clock if true'
+
+    # 4. Cartographer Mapping
+    # ros2 launch lane_mapping_acc cartographer_mapping.launch.py
+    cartographer_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_dir, 'launch', 'cartographer_mapping.launch.py')
+        ),
+        launch_arguments={
+            'use_sim': LaunchConfiguration('use_sim_time')
+        }.items()
     )
 
-    # Nvblox Node with remappings for our masked depth
+    # 5. Nvblox Node
+    # ros2 launch lane_mapping_acc nvblox_road_mapping.launch.py use_sim_time:=true
     nvblox_node = Node(
         package='nvblox_ros',
         executable='nvblox_node',
@@ -84,9 +135,12 @@ def generate_launch_description():
     
     return LaunchDescription([
         segmentation_config_arg,
-        use_sim_time_arg,
         nvblox_config_arg,
         global_frame_arg,
+        use_sim_time_arg,
+        static_tf_publisher,
+        color_segmentation_node,
         road_segmentation_launch,
+        cartographer_launch,
         nvblox_node,
     ])
