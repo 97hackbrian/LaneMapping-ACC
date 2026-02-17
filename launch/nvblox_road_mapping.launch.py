@@ -52,6 +52,12 @@ def generate_launch_description():
         description='Use simulation (Gazebo) clock if true'
     )
 
+    roi_height_ratio_arg = DeclareLaunchArgument(
+        'roi_height_ratio',
+        default_value='0.2',
+        description='ROI height ratio for color segmentation'
+    )
+
     # 1. Static Transform Publisher
     # ros2 run tf2_ros static_transform_publisher --x 0.095 --y 0.032 --z 0.172 --roll -1.5708 --pitch 0 --yaw -1.5708 --frame-id base_link --child-frame-id camera_depth_optical_frame
     static_tf_publisher = Node(
@@ -81,7 +87,7 @@ def generate_launch_description():
         output='screen',
         parameters=[
             LaunchConfiguration('segmentation_config'),
-            {'roi_height_ratio': 0.2},
+            {'roi_height_ratio': LaunchConfiguration('roi_height_ratio')},
             # {'use_sim_time': LaunchConfiguration('use_sim_time')} # Omitting as per user's last edit pattern
         ]
     )
@@ -138,6 +144,7 @@ def generate_launch_description():
         nvblox_config_arg,
         global_frame_arg,
         use_sim_time_arg,
+        roi_height_ratio_arg,
         static_tf_publisher,
         color_segmentation_node,
         road_segmentation_launch,
