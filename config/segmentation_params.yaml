@@ -25,7 +25,7 @@ depth_masker:
 
     # Depth scale: divide raw depth values by this to get meters
     # Use 1000 for mm (standard), 10000 for custom sensors
-    depth_scale: 20000.0
+    depth_scale: 27000.0
 
     # Synchronization
     sync_slop: 0.01
