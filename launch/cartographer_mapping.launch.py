@@ -29,7 +29,7 @@ def generate_launch_description():
 
     qcar2_to_lidar_tf_node = Node(
             package='qcar2_nodes',
-            executable='fixed_lidar_frame_virtual',
+            executable='fixed_lidar_frame',
             name='fixed_lidar_frame')
 
     configuration_basename_la = DeclareLaunchArgument(
